@@ -1,0 +1,89 @@
+version: "2.0"
+services:
+  #Database
+  influxdb:
+    image: easypi/influxdb-arm
+    environment:
+      PRE_CREATE_DB: telegraf
+      ADMIN_USER: foobar
+      UXDB_INIT_PWD: foobar
+    ports:
+     - "8083:8083"
+     - "8086:8086"
+    volumes:
+     - ./influxdb_data:/var/lib/influxdb
+    restart: always
+  #Pi Monitoring
+  telegraf:
+    image: easypi/telegraf-arm
+    environment:
+      HOST_PROC: /rootfs/proc
+      HOST_SYS: /rootfs/sys
+    depends_on:
+    - influxdb
+    links:
+    - "influxdb:influxdb"
+    volumes:
+      - ".telegraf/telegraf.conf:/telegraf.conf:ro"
+      - "/sys:/rootfs/sys:ro"
+      - "/proc:/rootfs/proc:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    entrypoint: /bin/sh
+    command: -c "sleep 10s && exec /usr/local/bin/telegraf -config /telegraf.conf"
+    restart: always
+    privileged: true
+  #Dashboards
+  grafana:
+    image: easypi/grafana-arm
+    environment:
+      GF_SECURITY_ADMIN_USER: foobar
+      GF_SECURITY_ADMIN_PASSWORD: foobar
+    ports:
+     - "3000:3000"
+    volumes:
+     - ./grafana_data:/var/lib/grafana
+     - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+    links:
+     - "influxdb:influxdb"
+    depends_on:
+     - influxdb
+    restart: always
+  #Portainer for management
+  portainer:
+    image: portainer/portainer
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+    - "9000:9000"
+    restart: always
+  #PiHole
+  pihole:
+    image: diginc/pi-hole:arm
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8888:80/tcp"
+    environment:
+      # enter your docker host IP here
+      ServerIP: 192.168.1.187
+      DNS1: 208.67.222.222
+      DNS2: 208.67.220.220
+      VIRTUAL_HOST: pihole.minibian
+      VIRTUAL_PORT: 80
+    # Add your own custom hostnames you need for your domain
+    volumes:
+      - '/etc/pihole/:/etc/pihole/'
+      # WARNING: if this log don't exist as a file on the host already
+      # docker will try to create a directory in it's place making for lots of errors
+      # - '/var/log/pihole.log:/var/log/pihole.log'
+    restart: always
+  #Config Script
+  bootstrap:
+    image: "alpine:latest"
+    links:
+      - "grafana:grafana"
+    volumes:
+      - "./bootstrap/bootstrap.sh:/bootstrap.sh:ro"
+      - "./grafana/system.json:/system.json:ro"
+    command: chmod +x /bootstrap.sh && /bootstrap.sh
