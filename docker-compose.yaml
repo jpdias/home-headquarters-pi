@@ -3,10 +3,6 @@ services:
   #Database
   influxdb:
     image: easypi/influxdb-arm
-    environment:
-      PRE_CREATE_DB: telegraf
-      ADMIN_USER: foobar
-      UXDB_INIT_PWD: foobar
     ports:
      - "8083:8083"
      - "8086:8086"
@@ -24,12 +20,10 @@ services:
     links:
     - "influxdb:influxdb"
     volumes:
-      - ".telegraf/telegraf.conf:/telegraf.conf:ro"
+      - "./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro"
       - "/sys:/rootfs/sys:ro"
       - "/proc:/rootfs/proc:ro"
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-    entrypoint: /bin/sh
-    command: -c "sleep 10s && exec /usr/local/bin/telegraf -config /telegraf.conf"
     restart: always
     privileged: true
   #Dashboards
@@ -43,6 +37,14 @@ services:
     volumes:
      - ./grafana_data:/var/lib/grafana
      - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+    links:
+     - "influxdb:influxdb"
+    depends_on:
+     - influxdb
+    restart: always
+  #Python Script Cron
+  home-monitor-py:
+    build: home_monitor/
     links:
      - "influxdb:influxdb"
     depends_on:
